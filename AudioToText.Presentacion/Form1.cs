@@ -1,7 +1,9 @@
 using AudioToText.Helpers;
 using AudioToText.Interfaces;
-using AudioText.Services;
 using AudioToText.Services;
+using System;
+using System.IO;
+using System.Windows.Forms;
 
 namespace AudioToText.Presentacion
 {
@@ -34,6 +36,11 @@ namespace AudioToText.Presentacion
 
             // Evento para progress bar moderna
             pbProgreso.Paint += pbProgreso_Paint;
+
+            // Ajustes para que la ProgressBar personalizada funcione correctamente
+            pbProgreso.Style = ProgressBarStyle.Continuous;
+            pbProgreso.Maximum = 100;
+            pbProgreso.Value = 0;
         }
 
         // ------------------------------
@@ -54,7 +61,9 @@ namespace AudioToText.Presentacion
 
                 MessageBox.Show(
                     $"Archivo seleccionado: {Path.GetFileName(ofdSeleccionarAudio.FileName)}",
-                    "Archivo Cargado"
+                    "Archivo Cargado",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
                 );
             }
         }
@@ -66,7 +75,8 @@ namespace AudioToText.Presentacion
         {
             if (string.IsNullOrEmpty(txtRutaArchivo.Text) || !File.Exists(txtRutaArchivo.Text))
             {
-                MessageBox.Show("Seleccione un archivo de audio válido.", "Advertencia");
+                MessageBox.Show("Seleccione un archivo de audio válido.", "Advertencia",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -84,6 +94,7 @@ namespace AudioToText.Presentacion
                 txtResultadoTexto.Clear();
                 txtResultadoTexto.Text = $"Iniciando transcripción con {opcion}...\r\n";
                 pbProgreso.Value = 0;
+                pbProgreso.Refresh();
 
                 string rutaOriginal = txtRutaArchivo.Text;
                 string rutaParaProcesar = rutaOriginal;
@@ -125,6 +136,10 @@ namespace AudioToText.Presentacion
 
                 var reportePorcentaje = new Progress<int>(p =>
                 {
+                    // Aseguramos límites válidos
+                    if (p < pbProgreso.Minimum) p = pbProgreso.Minimum;
+                    if (p > pbProgreso.Maximum) p = pbProgreso.Maximum;
+
                     pbProgreso.Value = p;
                     pbProgreso.Refresh();
                 });
@@ -140,11 +155,13 @@ namespace AudioToText.Presentacion
 
                 _textoTranscritorio = textoFinal;
 
-                MessageBox.Show("Transcripción completada.", "Éxito");
+                MessageBox.Show("Transcripción completada.", "Éxito",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error: {ex.Message}", "Error");
+                MessageBox.Show($"Error: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
                 pbProgreso.Value = 0;
             }
             finally
@@ -160,7 +177,8 @@ namespace AudioToText.Presentacion
         {
             if (string.IsNullOrEmpty(_textoTranscritorio))
             {
-                MessageBox.Show("Debe convertir un audio antes de encriptar.", "Advertencia");
+                MessageBox.Show("Debe convertir un audio antes de encriptar.", "Advertencia",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -169,11 +187,13 @@ namespace AudioToText.Presentacion
                 string cifrado = _encriptador.Encriptar(_textoTranscritorio);
                 txtResultadoEncriptado.Text = cifrado;
 
-                MessageBox.Show("Texto encriptado correctamente.", "Éxito");
+                MessageBox.Show("Texto encriptado correctamente.", "Éxito",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al encriptar: {ex.Message}", "Error");
+                MessageBox.Show($"Error al encriptar: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -186,7 +206,8 @@ namespace AudioToText.Presentacion
 
             if (string.IsNullOrEmpty(textoCifrado))
             {
-                MessageBox.Show("No hay texto para desencriptar.", "Advertencia");
+                MessageBox.Show("No hay texto para desencriptar.", "Advertencia",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -194,13 +215,17 @@ namespace AudioToText.Presentacion
             {
                 string texto = _encriptador.Desencriptar(textoCifrado);
 
-                txtResultadoTexto.Text = texto;
+                // En vez de sobreescribir la transcripción original, la añadimos para preservar historial
+                txtResultadoTexto.AppendText("\r\n\r\n--- TEXTO DESENCRIPTADO ---\r\n");
+                txtResultadoTexto.AppendText(texto);
 
-                MessageBox.Show("Texto desencriptado.", "Éxito");
+                MessageBox.Show("Texto desencriptado.", "Éxito",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al desencriptar: {ex.Message}", "Error");
+                MessageBox.Show($"Error al desencriptar: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -212,16 +237,19 @@ namespace AudioToText.Presentacion
             Rectangle rect = pbProgreso.ClientRectangle;
 
             // Fondo oscuro
-            e.Graphics.FillRectangle(new SolidBrush(Color.FromArgb(50, 50, 55)), rect);
+            using (var bgBrush = new SolidBrush(System.Drawing.Color.FromArgb(50, 50, 55)))
+            {
+                e.Graphics.FillRectangle(bgBrush, rect);
+            }
 
             if (pbProgreso.Value > 0)
             {
                 int width = (int)(rect.Width * ((double)pbProgreso.Value / pbProgreso.Maximum));
 
-                e.Graphics.FillRectangle(
-                    new SolidBrush(ModernDarkTheme.ProgressFillColor),
-                    new Rectangle(0, 0, width, rect.Height)
-                );
+                using (var fillBrush = new SolidBrush(ModernDarkTheme.ProgressFillColor))
+                {
+                    e.Graphics.FillRectangle(fillBrush, new System.Drawing.Rectangle(0, 0, width, rect.Height));
+                }
             }
         }
     }
