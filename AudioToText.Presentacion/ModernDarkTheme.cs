@@ -6,14 +6,17 @@ namespace AudioToText.Presentacion
 {
     public static class ModernDarkTheme
     {
+        // ===== PALETA PRINCIPAL =====
         private static readonly Color BackgroundColor = Color.FromArgb(32, 32, 32);
         private static readonly Color PanelColor = Color.FromArgb(45, 45, 45);
         private static readonly Color TextColor = Color.WhiteSmoke;
         private static readonly Color AccentColor = Color.FromArgb(0, 120, 215);
         private static readonly Color BorderColor = Color.FromArgb(70, 70, 70);
         private static readonly Color HoverColor = Color.FromArgb(60, 60, 60);
+
         public static readonly Color ProgressFillColor = Color.FromArgb(0, 120, 215);
 
+        // ================== APLICAR TEMA A FORM ==================
         public static void ApplyTheme(Form form)
         {
             form.BackColor = BackgroundColor;
@@ -23,60 +26,81 @@ namespace AudioToText.Presentacion
                 ApplyThemeToControl(c);
         }
 
+        // ================== APLICAR TEMA A CADA CONTROL ==================
         private static void ApplyThemeToControl(Control control)
         {
-            if (control is Panel)
+            switch (control)
             {
-                control.BackColor = PanelColor;
-            }
-            else if (control is Label)
-            {
-                control.ForeColor = TextColor;
-            }
-            else if (control is Button btn)
-            {
-                btn.BackColor = PanelColor;
-                btn.ForeColor = TextColor;
-                btn.FlatStyle = FlatStyle.Flat;
-                btn.FlatAppearance.BorderColor = BorderColor;
-                btn.FlatAppearance.BorderSize = 1;
-                btn.FlatAppearance.MouseOverBackColor = HoverColor;
-                btn.FlatAppearance.MouseDownBackColor = Color.FromArgb(25, 25, 25);
-            }
-            else if (control is TextBox txt)
-            {
-                txt.BackColor = Color.FromArgb(38, 38, 38);
-                txt.ForeColor = TextColor;
-                txt.BorderStyle = BorderStyle.FixedSingle;
-            }
-            else if (control is ComboBox cb)
-            {
-                cb.BackColor = Color.FromArgb(38, 38, 38);
-                cb.ForeColor = TextColor;
-                cb.FlatStyle = FlatStyle.Flat;
-            }
-            else if (control is CheckBox chk)
-            {
-                chk.ForeColor = TextColor;
-                chk.BackColor = BackgroundColor;
-            }
-            else if (control is DataGridView dgv)
-            {
-                ApplyThemeToDataGridView(dgv);
-            }
-            else
-            {
-                // Intentar aplicar color si el control lo soporta
-                TryApplyGenericStyle(control);
+                case Panel:
+                    control.BackColor = PanelColor;
+                    break;
+
+                case Label:
+                    control.ForeColor = TextColor;
+                    break;
+
+                case Button btn:
+                    ApplyButtonStyle(btn);
+                    break;
+
+                case TextBox txt:
+                    ApplyTextBoxStyle(txt);
+                    break;
+
+                case ComboBox cb:
+                    ApplyComboBoxStyle(cb);
+                    break;
+
+                case CheckBox chk:
+                    chk.ForeColor = TextColor;
+                    chk.BackColor = BackgroundColor;
+                    break;
+
+                case DataGridView dgv:
+                    ApplyThemeToDataGridView(dgv);
+                    break;
+
+                default:
+                    ApplyGenericStyle(control);
+                    break;
             }
 
-            // Aplicar a controles hijos
+            // ---- Aplicar a hijos ----
             foreach (Control child in control.Controls)
                 ApplyThemeToControl(child);
         }
 
-        private static void TryApplyGenericStyle(Control c)
+        // ================== ESTILOS ESPECÍFICOS ==================
+
+        private static void ApplyButtonStyle(Button btn)
         {
+            btn.BackColor = PanelColor;
+            btn.ForeColor = TextColor;
+            btn.FlatStyle = FlatStyle.Flat;
+
+            btn.FlatAppearance.BorderColor = BorderColor;
+            btn.FlatAppearance.BorderSize = 1;
+            btn.FlatAppearance.MouseOverBackColor = HoverColor;
+            btn.FlatAppearance.MouseDownBackColor = Color.FromArgb(25, 25, 25);
+        }
+
+        private static void ApplyTextBoxStyle(TextBox txt)
+        {
+            txt.BackColor = Color.FromArgb(38, 38, 38);
+            txt.ForeColor = TextColor;
+            txt.BorderStyle = BorderStyle.FixedSingle;
+        }
+
+        private static void ApplyComboBoxStyle(ComboBox cb)
+        {
+            cb.BackColor = Color.FromArgb(38, 38, 38);
+            cb.ForeColor = TextColor;
+            cb.FlatStyle = FlatStyle.Flat;
+        }
+
+        private static void ApplyGenericStyle(Control c)
+        {
+            // Intentar aplicar colores genéricos
             try
             {
                 c.BackColor = PanelColor;
@@ -84,39 +108,33 @@ namespace AudioToText.Presentacion
             }
             catch { }
 
-            // --- Soporte especial para controles personalizados con ProgressFill ---
+            // ========== REFLEXIÓN PARA CONTROLES PERSONALIZADOS ==========
             var type = c.GetType();
 
-            if (type.GetProperty("ProgressFill") != null)
-            {
-                type.GetProperty("ProgressFill")?.SetValue(c, ProgressFillColor);
-            }
+            ApplyPropertyIfExists(type, c, "ProgressFill", ProgressFillColor);
+            ApplyPropertyIfExists(type, c, "FillColor", PanelColor);
+            ApplyPropertyIfExists(type, c, "HoverColor", HoverColor);
+            ApplyPropertyIfExists(type, c, "BorderRadius", 8);
+            ApplyPropertyIfExists(type, c, "BorderSize", 1);
+        }
 
-            if (type.GetProperty("FillColor") != null)
+        // Método seguro para aplicar propiedades vía reflexión
+        private static void ApplyPropertyIfExists(Type type, Control control, string propName, object value)
+        {
+            var prop = type.GetProperty(propName);
+            if (prop != null && prop.CanWrite)
             {
-                type.GetProperty("FillColor")?.SetValue(c, PanelColor);
-            }
-
-            if (type.GetProperty("HoverColor") != null)
-            {
-                type.GetProperty("HoverColor")?.SetValue(c, HoverColor);
-            }
-
-            if (type.GetProperty("BorderRadius") != null)
-            {
-                type.GetProperty("BorderRadius")?.SetValue(c, 8);
-            }
-
-            if (type.GetProperty("BorderSize") != null)
-            {
-                type.GetProperty("BorderSize")?.SetValue(c, 1);
+                try { prop.SetValue(control, value); }
+                catch { }
             }
         }
 
+        // ================== ESTILOS ESPECIALES PARA DATAGRID ==================
         private static void ApplyThemeToDataGridView(DataGridView dgv)
         {
             dgv.BackgroundColor = BackgroundColor;
             dgv.ForeColor = TextColor;
+
             dgv.EnableHeadersVisualStyles = false;
 
             dgv.ColumnHeadersDefaultCellStyle.BackColor = PanelColor;
@@ -128,6 +146,8 @@ namespace AudioToText.Presentacion
             dgv.RowsDefaultCellStyle.SelectionBackColor = Color.FromArgb(60, 60, 60);
 
             dgv.GridColor = BorderColor;
+            dgv.BorderStyle = BorderStyle.FixedSingle;
+            dgv.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
         }
     }
 }
