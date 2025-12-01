@@ -1,27 +1,38 @@
-﻿
-using AudioToText.Interfaces;
+﻿using AudioToText.Interfaces;
 using NAudio.Wave;
 using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using Whisper.net;
 
-namespace AudioText.Services
+namespace AudioToText.Services
 {
     /// <summary>
-    /// Implementación de IProcesadorAudio usando Whisper.net (IA Offline).
+    /// Implementación de <see cref="IProcesadorAudio"/> utilizando Whisper.net.
+    /// Procesa audio completamente offline sin depender de servicios externos.
     /// </summary>
     public class WhisperProcessorService : IProcesadorAudio
     {
-        // Nombre del archivo del modelo que descargaste en el Paso 1
+        /// <summary>
+        /// Nombre del modelo Whisper (ARCHIVO BIN) que debe estar en la carpeta del ejecutable.
+        /// </summary>
         private const string ModelFileName = "ggml-base.bin";
 
-        public async Task<string> ConvertirATextoAsync(string rutaArchivo, IProgress<string> progresoTexto = null, IProgress<int> progresoPorcentaje = null)
+        /// <summary>
+        /// Convierte un audio a texto utilizando Whisper.net.
+        /// </summary>
+        public async Task<string> ConvertirATextoAsync(
+            string rutaArchivo,
+            IProgress<string> progresoTexto = null,
+            IProgress<int> progresoPorcentaje = null)
         {
-            if (!File.Exists(ModelFileName)) throw new FileNotFoundException($"Falta el modelo '{ModelFileName}'.");
-            if (!File.Exists(rutaArchivo)) throw new FileNotFoundException("Archivo de audio no encontrado.");
+            if (!File.Exists(ModelFileName))
+                throw new FileNotFoundException(
+                    $"No se encontró el modelo Whisper '{ModelFileName}'. Debe estar en la carpeta del ejecutable.");
+
+            if (!File.Exists(rutaArchivo))
+                throw new FileNotFoundException("El archivo de audio especificado no existe.");
 
             try
             {
@@ -29,53 +40,60 @@ namespace AudioText.Services
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"Error en Whisper: {ex.Message}");
+                throw new InvalidOperationException($"Error procesando audio con Whisper: {ex.Message}", ex);
             }
         }
 
-        private async Task<string> ProcessAudioAsync(string rutaArchivo, IProgress<string> progresoTexto, IProgress<int> progresoPorcentaje)
+        /// <summary>
+        /// Procesa el archivo de audio y genera la transcripción.
+        /// </summary>
+        private async Task<string> ProcessAudioAsync(
+            string rutaArchivo,
+            IProgress<string> progresoTexto,
+            IProgress<int> progresoPorcentaje)
         {
-            // 1. Obtener la duración total del audio para calcular el %
+            // Obtiene duración total del audio (sirve para calcular porcentaje)
             TimeSpan duracionTotal;
             using (var reader = new AudioFileReader(rutaArchivo))
             {
                 duracionTotal = reader.TotalTime;
             }
 
+            // Inicializa Whisper (modelo + procesador)
             using var whisperFactory = WhisperFactory.FromPath(ModelFileName);
             using var processor = whisperFactory.CreateBuilder()
                 .WithLanguage("es")
                 .Build();
 
             using var fileStream = File.OpenRead(rutaArchivo);
-            StringBuilder transcripcionCompleta = new StringBuilder();
 
-            // 2. Procesar
+            var resultado = new StringBuilder();
+
+            // Procesa el audio en streaming (segmentos)
             await foreach (var segment in processor.ProcessAsync(fileStream))
             {
-                string nuevoTexto = segment.Text;
-                transcripcionCompleta.Append(nuevoTexto);
+                if (!string.IsNullOrWhiteSpace(segment.Text))
+                {
+                    resultado.Append(segment.Text);
 
-                // Reportar Texto (Streaming)
-                progresoTexto?.Report(nuevoTexto);
+                    // Reporta texto en streaming (para UI)
+                    progresoTexto?.Report(segment.Text);
+                }
 
-                // Reportar Porcentaje (Cálculo matemático)
+                // Reporta porcentaje exacto
                 if (progresoPorcentaje != null && duracionTotal.TotalSeconds > 0)
                 {
-                    // segment.End es el tiempo donde termina la frase actual
                     double porcentaje = (segment.End.TotalSeconds / duracionTotal.TotalSeconds) * 100;
-
-                    // Aseguramos que esté entre 0 y 100
                     int porcentajeEntero = Math.Clamp((int)porcentaje, 0, 100);
 
                     progresoPorcentaje.Report(porcentajeEntero);
                 }
             }
 
-            // Aseguramos que llegue al 100% al final
+            // Aseguramos 100%
             progresoPorcentaje?.Report(100);
 
-            return transcripcionCompleta.ToString().Trim();
+            return resultado.ToString().Trim();
         }
     }
 }
